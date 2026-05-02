@@ -1,15 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
+import type { RoastResult } from "./types";
 
-export interface RoastResult {
-  score: number;
-  headline_feedback: string;
-  value_prop_feedback: string;
-  ux_issues: string[];
-  trust_issues: string[];
-  cta_feedback: string;
-  improvements: string[];
-  rewritten_headline: string;
-}
+export type { RoastResult, PublicRoastResult } from "./types";
+export { isFullResult } from "./types";
 
 const MOCK_RESULT: RoastResult = {
   score: 5,

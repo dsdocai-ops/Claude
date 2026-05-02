@@ -30,12 +30,23 @@ export function Paywall({ id, onUnlock }: { id: string; onUnlock?: () => void })
     }
   }
 
-  function handleCode(e: React.FormEvent) {
+  async function handleCode(e: React.FormEvent) {
     e.preventDefault();
-    if (code.trim() === "123") {
-      onUnlock?.();
-    } else {
-      setCodeError("Invalid code.");
+    setCodeError("");
+    try {
+      const res = await fetch("/api/unlock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, id }),
+      });
+      const data = await res.json();
+      if (data.valid) {
+        onUnlock?.();
+      } else {
+        setCodeError("Invalid code.");
+      }
+    } catch {
+      setCodeError("Could not validate code. Please try again.");
     }
   }
 

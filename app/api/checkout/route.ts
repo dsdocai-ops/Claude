@@ -24,26 +24,32 @@ export async function POST(req: NextRequest) {
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-  const session = await stripe.checkout.sessions.create({
-    payment_method_types: ["card"],
-    line_items: [
-      {
-        price_data: {
-          currency: "usd",
-          product_data: {
-            name: "Website Roast — Full Report",
-            description: "Full UX breakdown, conversion fixes, and rewritten headline.",
+  let session: Stripe.Checkout.Session;
+  try {
+    session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: "Website Roast — Full Report",
+              description: "Full UX breakdown, conversion fixes, and rewritten headline.",
+            },
+            unit_amount: 500, // $5.00
           },
-          unit_amount: 500, // $5.00
+          quantity: 1,
         },
-        quantity: 1,
-      },
-    ],
-    mode: "payment",
-    client_reference_id: id,                          // stored on Stripe payment for records
-    success_url: `${BASE_URL}/results?paid=true&id=${id}`,
-    cancel_url: `${BASE_URL}/results?id=${id}`,
-  });
+      ],
+      mode: "payment",
+      client_reference_id: id,                          // stored on Stripe payment for records
+      success_url: `${BASE_URL}/results?paid=true&id=${id}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${BASE_URL}/results?id=${id}`,
+    });
+  } catch (err) {
+    console.error("Stripe error:", err);
+    return NextResponse.json({ error: "Could not create checkout session." }, { status: 500 });
+  }
 
   return NextResponse.json({ url: session.url });
 }

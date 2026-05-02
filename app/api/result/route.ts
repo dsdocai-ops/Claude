@@ -8,10 +8,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing id." }, { status: 400 });
   }
 
-  const entry = getRoastById(id);
+  const entry = await getRoastById(id);
   if (!entry) {
     return NextResponse.json({ error: "Result not found or expired." }, { status: 404 });
   }
 
-  return NextResponse.json(entry);
+  if (!entry.paid) {
+    // Return only the free fields so the full result never leaves the server unpaid
+    return NextResponse.json({
+      siteUrl: entry.siteUrl,
+      paid: false,
+      result: { score: entry.result.score, headline_feedback: entry.result.headline_feedback },
+    });
+  }
+
+  return NextResponse.json({ siteUrl: entry.siteUrl, paid: true, result: entry.result });
 }

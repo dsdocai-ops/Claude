@@ -1,21 +1,12 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { Flame } from "@/components/ui/Flame";
 import { Paywall } from "@/components/Paywall";
-
-interface RoastResult {
-  score: number;
-  headline_feedback: string;
-  value_prop_feedback: string;
-  ux_issues: string[];
-  trust_issues: string[];
-  cta_feedback: string;
-  improvements: string[];
-  rewritten_headline: string;
-}
+import type { PublicRoastResult, RoastResult } from "@/lib/types";
+import { isFullResult } from "@/lib/types";
 
 function BulletList({ items }: { items: string[] }) {
   return (
@@ -61,10 +52,20 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={copy}
-      className="text-xs font-semibold text-orange-600 hover:text-orange-700 transition-colors border border-orange-200 hover:border-orange-300 px-3 py-1.5 rounded-lg bg-orange-50 hover:bg-orange-100 active:scale-95 transition-all"
+      className="text-xs font-semibold text-orange-600 hover:text-orange-700 border border-orange-200 hover:border-orange-300 px-3 py-1.5 rounded-lg bg-orange-50 hover:bg-orange-100 active:scale-95 transition-all"
     >
       {copied ? "Copied!" : "Copy"}
     </button>
+  );
+}
+
+function LockedSkeleton() {
+  return (
+    <div className="space-y-3 animate-pulse">
+      <div className="h-4 bg-gray-200 rounded w-3/4" />
+      <div className="h-4 bg-gray-200 rounded w-5/6" />
+      <div className="h-4 bg-gray-200 rounded w-2/3" />
+    </div>
   );
 }
 
@@ -73,13 +74,19 @@ function ResultsContent() {
   const router = useRouter();
 
   const id = params.get("id");
-  const [isPaid, setIsPaid] = useState(params.get("paid") === "true");
+  const paidParam = params.get("paid") === "true";
 
-  const [result, setResult] = useState<RoastResult | null>(null);
+  const [partial, setPartial] = useState<PublicRoastResult | null>(null);
+  const [full, setFull] = useState<RoastResult | null>(null);
   const [siteUrl, setSiteUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [isPaid, setIsPaid] = useState(paidParam);
+  const [fetchingFull, setFetchingFull] = useState(false);
 
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load initial (partial) result
   useEffect(() => {
     if (!id) {
       setNotFound(true);
@@ -90,9 +97,20 @@ function ResultsContent() {
     const cached = sessionStorage.getItem(`roast:${id}`);
     if (cached) {
       try {
-        const { siteUrl, result } = JSON.parse(cached);
-        setResult(result);
-        setSiteUrl(siteUrl ?? "");
+        const data = JSON.parse(cached) as {
+          siteUrl: string;
+          result: PublicRoastResult | RoastResult;
+          paid?: boolean;
+        };
+        setSiteUrl(data.siteUrl ?? "");
+        if (isFullResult(data.result)) {
+          setFull(data.result);
+          setPartial({ score: data.result.score, headline_feedback: data.result.headline_feedback });
+          setIsPaid(true);
+        } else {
+          setPartial(data.result);
+          if (data.paid) setIsPaid(true);
+        }
       } catch {
         setNotFound(true);
       }
@@ -102,18 +120,69 @@ function ResultsContent() {
 
     fetch(`/api/result?id=${id}`)
       .then((res) => {
-        if (res.status === 404) { setNotFound(true); return null; }
+        if (res.status === 404) {
+          setNotFound(true);
+          return null;
+        }
         return res.json();
       })
       .then((data) => {
         if (data) {
-          setResult(data.result);
           setSiteUrl(data.siteUrl ?? "");
+          setPartial(data.result);
+          if (data.paid && isFullResult(data.result)) {
+            setFull(data.result);
+            setIsPaid(true);
+          }
         }
       })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // When paid, poll /api/result until the webhook has marked the record paid and we get the full result
+  useEffect(() => {
+    if (!isPaid || !id || full) return;
+
+    setFetchingFull(true);
+    let attempts = 0;
+    const MAX_ATTEMPTS = 8;
+
+    function tryFetch() {
+      fetch(`/api/result?id=${id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.paid && isFullResult(data.result)) {
+            setFull(data.result);
+            setSiteUrl((prev) => data.siteUrl ?? prev);
+            setFetchingFull(false);
+            // Cache the full result so future visits skip the poll
+            sessionStorage.setItem(
+              `roast:${id}`,
+              JSON.stringify({ siteUrl: data.siteUrl, result: data.result, paid: true })
+            );
+          } else if (attempts < MAX_ATTEMPTS) {
+            attempts++;
+            pollRef.current = setTimeout(tryFetch, 1500);
+          } else {
+            setFetchingFull(false);
+          }
+        })
+        .catch(() => {
+          if (attempts < MAX_ATTEMPTS) {
+            attempts++;
+            pollRef.current = setTimeout(tryFetch, 1500);
+          } else {
+            setFetchingFull(false);
+          }
+        });
+    }
+
+    tryFetch();
+    return () => {
+      if (pollRef.current) clearTimeout(pollRef.current);
+    };
+  }, [isPaid, id, full]);
 
   if (loading) {
     return (
@@ -123,13 +192,11 @@ function ResultsContent() {
     );
   }
 
-  if (notFound || !result) {
+  if (notFound || !partial) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 text-center px-6">
         <p className="text-2xl font-bold">Roast not found</p>
-        <p className="text-gray-500">
-          This roast has expired or the link is invalid.
-        </p>
+        <p className="text-gray-500">This roast has expired or the link is invalid.</p>
         <button
           onClick={() => router.push("/")}
           className="mt-4 px-6 py-3 bg-black text-white font-bold rounded-xl hover:bg-gray-900 transition-all"
@@ -141,9 +208,9 @@ function ResultsContent() {
   }
 
   const scoreColor =
-    result.score >= 7
+    partial.score >= 7
       ? "text-green-600"
-      : result.score >= 5
+      : partial.score >= 5
       ? "text-yellow-600"
       : "text-red-500";
 
@@ -173,7 +240,7 @@ function ResultsContent() {
       <div className="max-w-3xl mx-auto px-6 py-10 space-y-5">
         {/* Score hero — always free */}
         <div className="bg-black text-white rounded-2xl p-8 flex flex-col sm:flex-row items-center gap-6 animate-fade-in">
-          <ScoreRing score={result.score} size="lg" dark />
+          <ScoreRing score={partial.score} size="lg" dark />
           <div>
             <p className="text-gray-400 text-sm font-medium mb-1 uppercase tracking-wider">
               Roast complete for
@@ -182,7 +249,7 @@ function ResultsContent() {
               {displayUrl || "your website"}
             </p>
             <p className={`text-5xl font-black ${scoreColor}`}>
-              {result.score}
+              {partial.score}
               <span className="text-2xl text-gray-500 font-normal">/10</span>
             </p>
             <p className="text-gray-400 text-sm mt-1">Conversion Score</p>
@@ -192,7 +259,7 @@ function ResultsContent() {
         {/* Headline Feedback — free preview */}
         <Section title="Headline Feedback" emoji="📣">
           <p className="text-gray-700 text-sm leading-relaxed mt-2">
-            {result.headline_feedback}
+            {partial.headline_feedback}
           </p>
         </Section>
 
@@ -207,68 +274,118 @@ function ResultsContent() {
           </div>
         )}
 
-        {/* Locked content */}
+        {/* Locked / full content */}
         <div className="relative">
-          <div
-            className="space-y-5 transition-all duration-300"
-            style={
-              isPaid
-                ? undefined
-                : { filter: "blur(6px)", pointerEvents: "none", userSelect: "none" }
-            }
-          >
-            <div className="bg-orange-50 border-2 border-orange-300 rounded-2xl p-6">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-xs font-bold uppercase tracking-widest text-orange-700">
-                  ✏️ Rewritten Headline
-                </h2>
-                {isPaid && <CopyButton text={result.rewritten_headline} />}
+          {isPaid && fetchingFull ? (
+            // Payment confirmed, waiting for webhook to propagate
+            <div className="flex flex-col items-center gap-4 py-16 text-gray-500">
+              <div className="w-8 h-8 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin" />
+              <p className="text-sm font-medium">Unlocking your full roast…</p>
+            </div>
+          ) : isPaid && full ? (
+            // Full result available
+            <div className="space-y-5">
+              <div className="bg-orange-50 border-2 border-orange-300 rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-xs font-bold uppercase tracking-widest text-orange-700">
+                    ✏️ Rewritten Headline
+                  </h2>
+                  <CopyButton text={full.rewritten_headline} />
+                </div>
+                <p className="text-orange-900 font-bold text-lg leading-snug">
+                  "{full.rewritten_headline}"
+                </p>
               </div>
-              <p className="text-orange-900 font-bold text-lg leading-snug">
-                "{result.rewritten_headline}"
-              </p>
-            </div>
 
-            <div className="grid sm:grid-cols-2 gap-5">
-              <Section title="Value Proposition" emoji="💎">
-                <p className="text-gray-700 text-sm leading-relaxed mt-2">
-                  {result.value_prop_feedback}
-                </p>
+              <div className="grid sm:grid-cols-2 gap-5">
+                <Section title="Value Proposition" emoji="💎">
+                  <p className="text-gray-700 text-sm leading-relaxed mt-2">
+                    {full.value_prop_feedback}
+                  </p>
+                </Section>
+                <Section title="Call-to-Action" emoji="🎯">
+                  <p className="text-gray-700 text-sm leading-relaxed mt-2">
+                    {full.cta_feedback}
+                  </p>
+                </Section>
+              </div>
+
+              <Section title="UX Friction Points" emoji="⚡">
+                <BulletList items={full.ux_issues} />
               </Section>
-              <Section title="Call-to-Action" emoji="🎯">
-                <p className="text-gray-700 text-sm leading-relaxed mt-2">
-                  {result.cta_feedback}
-                </p>
+
+              <Section title="Trust Issues" emoji="🔒">
+                <BulletList items={full.trust_issues} />
+              </Section>
+
+              <Section title="Top Improvements" emoji="🚀">
+                <ol className="space-y-3 mt-3">
+                  {full.improvements.map((item, i) => (
+                    <li key={i} className="flex gap-3 text-sm leading-relaxed text-gray-700">
+                      <span className="flex items-center justify-center w-6 h-6 rounded-full bg-black text-white text-xs font-black shrink-0 mt-0.5">
+                        {i + 1}
+                      </span>
+                      {item}
+                    </li>
+                  ))}
+                </ol>
               </Section>
             </div>
+          ) : (
+            // Unpaid — show blurred skeletons + paywall overlay
+            <>
+              <div
+                className="space-y-5"
+                style={{ filter: "blur(6px)", pointerEvents: "none", userSelect: "none" }}
+                aria-hidden="true"
+              >
+                <div className="bg-orange-50 border-2 border-orange-300 rounded-2xl p-6">
+                  <h2 className="text-xs font-bold uppercase tracking-widest text-orange-700 mb-3">
+                    ✏️ Rewritten Headline
+                  </h2>
+                  <LockedSkeleton />
+                </div>
 
-            <Section title="UX Friction Points" emoji="⚡">
-              <BulletList items={result.ux_issues} />
-            </Section>
+                <div className="grid sm:grid-cols-2 gap-5">
+                  <Section title="Value Proposition" emoji="💎">
+                    <div className="mt-2"><LockedSkeleton /></div>
+                  </Section>
+                  <Section title="Call-to-Action" emoji="🎯">
+                    <div className="mt-2"><LockedSkeleton /></div>
+                  </Section>
+                </div>
 
-            <Section title="Trust Issues" emoji="🔒">
-              <BulletList items={result.trust_issues} />
-            </Section>
+                <Section title="UX Friction Points" emoji="⚡">
+                  <div className="mt-3 space-y-2">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-4 bg-gray-200 rounded animate-pulse" style={{ width: `${75 - i * 8}%` }} />
+                    ))}
+                  </div>
+                </Section>
 
-            <Section title="Top Improvements" emoji="🚀">
-              <ol className="space-y-3 mt-3">
-                {result.improvements.map((item, i) => (
-                  <li key={i} className="flex gap-3 text-sm leading-relaxed text-gray-700">
-                    <span className="flex items-center justify-center w-6 h-6 rounded-full bg-black text-white text-xs font-black shrink-0 mt-0.5">
-                      {i + 1}
-                    </span>
-                    {item}
-                  </li>
-                ))}
-              </ol>
-            </Section>
-          </div>
+                <Section title="Trust Issues" emoji="🔒">
+                  <div className="mt-3 space-y-2">
+                    {[1, 2].map((i) => (
+                      <div key={i} className="h-4 bg-gray-200 rounded animate-pulse" style={{ width: `${70 - i * 5}%` }} />
+                    ))}
+                  </div>
+                </Section>
 
-          {/* Paywall overlay */}
-          {!isPaid && id && (
-            <div className="absolute inset-0 flex items-start justify-center pt-12">
-              <Paywall id={id} onUnlock={() => setIsPaid(true)} />
-            </div>
+                <Section title="Top Improvements" emoji="🚀">
+                  <div className="mt-3 space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-4 bg-gray-200 rounded animate-pulse" style={{ width: `${80 - i * 5}%` }} />
+                    ))}
+                  </div>
+                </Section>
+              </div>
+
+              {id && (
+                <div className="absolute inset-0 flex items-start justify-center pt-12">
+                  <Paywall id={id} onUnlock={() => setIsPaid(true)} />
+                </div>
+              )}
+            </>
           )}
         </div>
 

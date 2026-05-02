@@ -1,3 +1,26 @@
+// Patterns that could instruct the LLM to ignore its system prompt or change its behaviour.
+// We replace matches with a neutral placeholder so the content isn't silently dropped.
+const INJECTION_PATTERNS: RegExp[] = [
+  /ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|context|rules?)/gi,
+  /disregard\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?|context)/gi,
+  /you\s+are\s+now\s+(?:a\s+)?(?:an?\s+)?\w/gi,
+  /forget\s+everything\s+(above|before|prior|previously)/gi,
+  /new\s+instructions?:/gi,
+  /\[SYSTEM\]/gi,
+  /\[INST\]/gi,
+  /\[\/INST\]/gi,
+  /<\|(?:system|user|assistant|im_start|im_end)\|>/gi, // token-boundary injection markers
+  /###\s*(?:INSTRUCTION|SYSTEM|HUMAN|ASSISTANT|PROMPT)/gi,
+];
+
+function sanitiseForLLM(text: string): string {
+  let out = text;
+  for (const pattern of INJECTION_PATTERNS) {
+    out = out.replace(pattern, "[content removed]");
+  }
+  return out;
+}
+
 export function extractText(html: string): string {
   // Remove script, style, noscript, svg, and comment blocks
   let text = html
@@ -32,6 +55,9 @@ export function extractText(html: string): string {
 
   // Collapse whitespace
   text = text.replace(/\s+/g, " ").trim();
+
+  // Sanitise prompt-injection attempts before the text is sent to Claude
+  text = sanitiseForLLM(text);
 
   // Cap at ~8000 chars to stay within token limits
   if (text.length > 8000) {
