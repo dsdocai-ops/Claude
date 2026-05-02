@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 
-export function Paywall({ id }: { id: string }) {
+export function Paywall({ id, onUnlock }: { id: string; onUnlock?: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [code, setCode] = useState("");
+  const [codeError, setCodeError] = useState("");
 
   async function goToCheckout() {
     setLoading(true);
@@ -25,6 +27,15 @@ export function Paywall({ id }: { id: string }) {
     } catch {
       setError("Network error. Please try again.");
       setLoading(false);
+    }
+  }
+
+  function handleCode(e: React.FormEvent) {
+    e.preventDefault();
+    if (code.trim().toLowerCase() === "code") {
+      onUnlock?.();
+    } else {
+      setCodeError("Invalid code.");
     }
   }
 
@@ -66,6 +77,28 @@ export function Paywall({ id }: { id: string }) {
         >
           {loading ? "Redirecting to Stripe…" : "Unlock for $5 🔥"}
         </button>
+
+        <div className="mt-6 pt-5 border-t border-gray-100">
+          <p className="text-xs text-gray-400 mb-2">Have a code?</p>
+          <form onSubmit={handleCode} className="flex gap-2">
+            <input
+              type="text"
+              value={code}
+              onChange={(e) => { setCode(e.target.value); setCodeError(""); }}
+              placeholder="Enter code"
+              className="flex-1 px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent"
+            />
+            <button
+              type="submit"
+              className="px-4 py-2 text-sm font-semibold bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              Apply
+            </button>
+          </form>
+          {codeError && (
+            <p className="text-xs text-red-500 mt-1.5 text-left">{codeError}</p>
+          )}
+        </div>
       </div>
     </div>
   );

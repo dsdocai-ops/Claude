@@ -73,7 +73,7 @@ function ResultsContent() {
   const router = useRouter();
 
   const id = params.get("id");
-  const isPaid = params.get("paid") === "true";
+  const [isPaid, setIsPaid] = useState(params.get("paid") === "true");
 
   const [result, setResult] = useState<RoastResult | null>(null);
   const [siteUrl, setSiteUrl] = useState("");
@@ -267,7 +267,7 @@ function ResultsContent() {
           {/* Paywall overlay */}
           {!isPaid && id && (
             <div className="absolute inset-0 flex items-start justify-center pt-12">
-              <Paywall id={id} />
+              <Paywall id={id} onUnlock={() => setIsPaid(true)} />
             </div>
           )}
         </div>
