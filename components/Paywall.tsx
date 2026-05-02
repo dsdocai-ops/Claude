@@ -32,7 +32,7 @@ export function Paywall({ id, onUnlock }: { id: string; onUnlock?: () => void })
 
   function handleCode(e: React.FormEvent) {
     e.preventDefault();
-    if (code.trim().toLowerCase() === "code") {
+    if (code.trim() === "123") {
       onUnlock?.();
     } else {
       setCodeError("Invalid code.");
