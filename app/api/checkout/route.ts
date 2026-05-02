@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Confirm the result exists before creating a checkout session
-  if (!getRoastById(id)) {
+  if (!(await getRoastById(id))) {
     return NextResponse.json({ error: "Result not found or expired." }, { status: 404 });
   }
 
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       ],
       mode: "payment",
       client_reference_id: id,                          // stored on Stripe payment for records
-      success_url: `${BASE_URL}/results?paid=true&id=${id}`,
+      success_url: `${BASE_URL}/results?paid=true&id=${id}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${BASE_URL}/results?id=${id}`,
     });
   } catch (err) {
