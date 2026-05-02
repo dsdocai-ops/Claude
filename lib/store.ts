@@ -8,7 +8,7 @@ interface StoreEntry {
   expiresAt?: number; // only used by the in-memory fallback
 }
 
-const TTL_SECONDS = 2 * 60 * 60; // 2 hours
+const TTL_SECONDS = 2 * 60 * 60;
 
 // In-memory fallback — single-instance only; acceptable for local dev without Redis.
 const memStore = new Map<string, StoreEntry>();

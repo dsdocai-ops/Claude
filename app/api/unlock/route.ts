@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { markPaid } from "@/lib/store";
 
 export async function POST(req: NextRequest) {
-  let body: { code?: string };
+  let body: { code?: string; id?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const { code } = body;
+  const { code, id } = body;
   if (!code || typeof code !== "string") {
     return NextResponse.json({ valid: false }, { status: 200 });
   }
@@ -18,5 +19,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ valid: false }, { status: 200 });
   }
 
-  return NextResponse.json({ valid: code.trim() === unlockCode });
+  const valid = code.trim() === unlockCode;
+  if (valid && id && typeof id === "string") {
+    await markPaid(id);
+  }
+
+  return NextResponse.json({ valid });
 }

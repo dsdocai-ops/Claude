@@ -37,7 +37,7 @@ export function Paywall({ id, onUnlock }: { id: string; onUnlock?: () => void })
       const res = await fetch("/api/unlock", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({ code, id }),
       });
       const data = await res.json();
       if (data.valid) {
