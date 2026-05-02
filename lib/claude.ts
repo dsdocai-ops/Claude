@@ -38,8 +38,8 @@ const MOCK_RESULT: RoastResult = {
     "Stop losing customers to a confusing website — we build landing pages that convert.",
 };
 
-function buildPrompt(text: string, url: string): string {
-  return `Analyze this website for conversion effectiveness. The URL is: ${url}
+// Stable instructions in the system prompt — keeps user messages short (only variable content)
+const SYSTEM_PROMPT = `You are a conversion rate optimization expert. Analyze websites for conversion effectiveness.
 
 Focus on:
 1. Headline clarity
@@ -48,7 +48,7 @@ Focus on:
 4. Trust signals
 5. Call-to-action strength
 
-Return ONLY valid JSON in this exact format (no markdown, no explanation):
+Return ONLY valid JSON with no markdown fences or explanation:
 
 {
   "score": <number 1-10>,
@@ -61,22 +61,15 @@ Return ONLY valid JSON in this exact format (no markdown, no explanation):
   "rewritten_headline": "<a better headline for this site>"
 }
 
-Be direct, specific, and slightly critical. Focus on what would actually move the needle for conversions.
-
-Website content:
-${text}`;
-}
+Be direct, specific, and slightly critical. Focus on what would actually move the needle for conversions.`;
 
 function parseRoast(raw: string): RoastResult {
-  // Strip markdown code fences if present
   const cleaned = raw
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/, "")
     .trim();
 
   const parsed = JSON.parse(cleaned);
-
-  // Normalise and clamp score
   const score = Math.min(10, Math.max(1, Number(parsed.score) || 5));
 
   return {
@@ -106,12 +99,13 @@ export async function getRoast(
 
   try {
     const message = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1024,
+      model: "claude-haiku-4-5",   // 3x cheaper than sonnet; sufficient for structured JSON
+      max_tokens: 600,              // JSON response is ~400 tokens; 600 is safe headroom
+      system: SYSTEM_PROMPT,
       messages: [
         {
           role: "user",
-          content: buildPrompt(text, url),
+          content: `URL: ${url}\n\nWebsite content:\n${text}`,
         },
       ],
     });
@@ -124,7 +118,6 @@ export async function getRoast(
     return parseRoast(content.text);
   } catch (err) {
     console.error("Claude API error:", err);
-    // Return mock so the UI never breaks
     return MOCK_RESULT;
   }
 }
