@@ -133,6 +133,10 @@ export default function Home() {
         return;
       }
 
+      sessionStorage.setItem(
+        `roast:${data.id}`,
+        JSON.stringify({ siteUrl: data.siteUrl, result: data.result })
+      );
       router.push(`/results?id=${data.id}`);
     } catch {
       setError("Network error. Please try again.");

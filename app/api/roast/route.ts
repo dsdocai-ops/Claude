@@ -74,5 +74,5 @@ export async function POST(req: NextRequest) {
   const id = crypto.randomUUID();
   saveRoast(id, url, result);
 
-  return NextResponse.json({ id });
+  return NextResponse.json({ id, siteUrl: url, result });
 }

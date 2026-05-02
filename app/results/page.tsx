@@ -87,6 +87,19 @@ function ResultsContent() {
       return;
     }
 
+    const cached = sessionStorage.getItem(`roast:${id}`);
+    if (cached) {
+      try {
+        const { siteUrl, result } = JSON.parse(cached);
+        setResult(result);
+        setSiteUrl(siteUrl ?? "");
+      } catch {
+        setNotFound(true);
+      }
+      setLoading(false);
+      return;
+    }
+
     fetch(`/api/result?id=${id}`)
       .then((res) => {
         if (res.status === 404) { setNotFound(true); return null; }
