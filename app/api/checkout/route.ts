@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { getRoastById } from "@/lib/store";
 
 const BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL ||
@@ -17,11 +16,6 @@ export async function POST(req: NextRequest) {
   const { id } = body;
   if (!id || typeof id !== "string") {
     return NextResponse.json({ error: "Missing result id." }, { status: 400 });
-  }
-
-  // Confirm the result exists before creating a checkout session
-  if (!getRoastById(id)) {
-    return NextResponse.json({ error: "Result not found or expired." }, { status: 404 });
   }
 
   if (!process.env.STRIPE_SECRET_KEY) {
