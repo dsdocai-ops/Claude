@@ -99,7 +99,7 @@ export async function getRoast(
 
   try {
     const message = await client.messages.create({
-      model: "claude-haiku-4-5",   // 3x cheaper than sonnet; sufficient for structured JSON
+      model: "claude-haiku-4-5-20251001", // 3x cheaper than sonnet; sufficient for structured JSON
       max_tokens: 600,              // JSON response is ~400 tokens; 600 is safe headroom
       system: SYSTEM_PROMPT,
       messages: [
