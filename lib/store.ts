@@ -1,37 +1,62 @@
-import type { RoastResult } from "./claude";
+import { getRedis } from "./redis";
+import type { RoastResult } from "./types";
 
 interface StoreEntry {
   siteUrl: string;
   result: RoastResult;
-  expiresAt: number;
+  paid: boolean;
+  expiresAt?: number; // only used by the in-memory fallback
 }
 
-// Module-level Map — shared within a single serverless instance.
-// ⚠️  On Vercel each cold-start gets a fresh instance, so entries don't
-// survive across invocations. Acceptable for MVP; swap for Vercel KV / Redis
-// when you need cross-instance persistence.
-const store = new Map<string, StoreEntry>();
+const TTL_SECONDS = 2 * 60 * 60; // 2 hours
 
-const TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+// In-memory fallback — single-instance only; acceptable for local dev without Redis.
+const memStore = new Map<string, StoreEntry>();
 
-export function saveRoast(id: string, siteUrl: string, result: RoastResult): void {
-  purgeExpired();
-  store.set(id, { siteUrl, result, expiresAt: Date.now() + TTL_MS });
+export async function saveRoast(id: string, siteUrl: string, result: RoastResult): Promise<void> {
+  const redis = getRedis();
+  if (redis) {
+    await redis.set(`roast:${id}`, JSON.stringify({ siteUrl, result, paid: false }), {
+      ex: TTL_SECONDS,
+    });
+    return;
+  }
+  memStore.set(id, { siteUrl, result, paid: false, expiresAt: Date.now() + TTL_SECONDS * 1000 });
 }
 
-export function getRoastById(id: string): { siteUrl: string; result: RoastResult } | null {
-  const entry = store.get(id);
+export async function getRoastById(
+  id: string
+): Promise<{ siteUrl: string; result: RoastResult; paid: boolean } | null> {
+  const redis = getRedis();
+  if (redis) {
+    const raw = await redis.get<string>(`roast:${id}`);
+    if (!raw) return null;
+    const entry = typeof raw === "string" ? JSON.parse(raw) : (raw as StoreEntry);
+    return { siteUrl: entry.siteUrl, result: entry.result, paid: entry.paid ?? false };
+  }
+  const entry = memStore.get(id);
   if (!entry) return null;
-  if (entry.expiresAt < Date.now()) {
-    store.delete(id);
+  if (entry.expiresAt && entry.expiresAt < Date.now()) {
+    memStore.delete(id);
     return null;
   }
-  return { siteUrl: entry.siteUrl, result: entry.result };
+  return { siteUrl: entry.siteUrl, result: entry.result, paid: entry.paid };
 }
 
-function purgeExpired(): void {
-  const now = Date.now();
-  store.forEach(({ expiresAt }, key) => {
-    if (expiresAt < now) store.delete(key);
-  });
+export async function markPaid(id: string): Promise<void> {
+  const redis = getRedis();
+  if (redis) {
+    const raw = await redis.get<string>(`roast:${id}`);
+    if (!raw) return;
+    const entry = typeof raw === "string" ? JSON.parse(raw) : (raw as StoreEntry);
+    const ttl = await redis.ttl(`roast:${id}`);
+    await redis.set(
+      `roast:${id}`,
+      JSON.stringify({ ...entry, paid: true }),
+      { ex: ttl > 0 ? ttl : TTL_SECONDS }
+    );
+    return;
+  }
+  const entry = memStore.get(id);
+  if (entry) memStore.set(id, { ...entry, paid: true });
 }
