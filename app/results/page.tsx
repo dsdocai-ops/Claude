@@ -4,6 +4,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { ScoreRing } from "@/components/ui/ScoreRing";
 import { Flame } from "@/components/ui/Flame";
+import { Paywall } from "@/components/Paywall";
 
 interface RoastResult {
   score: number;
@@ -73,8 +74,12 @@ function ResultsContent() {
   const [result, setResult] = useState<RoastResult | null>(null);
   const [siteUrl, setSiteUrl] = useState("");
   const [parseError, setParseError] = useState(false);
+  const [currentUrl, setCurrentUrl] = useState("");
+
+  const isPaid = params.get("paid") === "true";
 
   useEffect(() => {
+    setCurrentUrl(window.location.href);
     const raw = params.get("data");
     const url = params.get("url");
     if (!raw) {
@@ -143,7 +148,7 @@ function ResultsContent() {
       </nav>
 
       <div className="max-w-3xl mx-auto px-6 py-10 space-y-5">
-        {/* Score hero */}
+        {/* Score hero — always free */}
         <div className="bg-black text-white rounded-2xl p-8 flex flex-col sm:flex-row items-center gap-6 animate-fade-in">
           <ScoreRing score={result.score} size="lg" dark />
           <div>
@@ -161,59 +166,91 @@ function ResultsContent() {
           </div>
         </div>
 
-        {/* Rewritten headline — featured */}
-        <div className="bg-orange-50 border-2 border-orange-300 rounded-2xl p-6 animate-slide-up">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-orange-700">
-              ✏️ Rewritten Headline
-            </h2>
-            <CopyButton text={result.rewritten_headline} />
-          </div>
-          <p className="text-orange-900 font-bold text-lg leading-snug">
-            "{result.rewritten_headline}"
-          </p>
-        </div>
-
-        <div className="grid sm:grid-cols-2 gap-5">
-          <Section title="Headline Feedback" emoji="📣">
-            <p className="text-gray-700 text-sm leading-relaxed mt-2">
-              {result.headline_feedback}
-            </p>
-          </Section>
-
-          <Section title="Value Proposition" emoji="💎">
-            <p className="text-gray-700 text-sm leading-relaxed mt-2">
-              {result.value_prop_feedback}
-            </p>
-          </Section>
-        </div>
-
-        <Section title="UX Friction Points" emoji="⚡">
-          <BulletList items={result.ux_issues} />
-        </Section>
-
-        <Section title="Trust Issues" emoji="🔒">
-          <BulletList items={result.trust_issues} />
-        </Section>
-
-        <Section title="Call-to-Action" emoji="🎯">
+        {/* Headline Feedback — free preview */}
+        <Section title="Headline Feedback" emoji="📣">
           <p className="text-gray-700 text-sm leading-relaxed mt-2">
-            {result.cta_feedback}
+            {result.headline_feedback}
           </p>
         </Section>
 
-        <Section title="Top Improvements" emoji="🚀">
-          <ol className="space-y-3 mt-3">
-            {result.improvements.map((item, i) => (
-              <li key={i} className="flex gap-3 text-sm leading-relaxed text-gray-700">
-                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-black text-white text-xs font-black shrink-0 mt-0.5">
-                  {i + 1}
-                </span>
-                {item}
-              </li>
-            ))}
-          </ol>
-        </Section>
+        {/* Free teaser label */}
+        {!isPaid && (
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px bg-gray-200" />
+            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
+              Free preview ends here
+            </span>
+            <div className="flex-1 h-px bg-gray-200" />
+          </div>
+        )}
+
+        {/* Locked content */}
+        <div className="relative">
+          {/* Blurred sections */}
+          <div
+            className="space-y-5 transition-all duration-300"
+            style={
+              isPaid
+                ? undefined
+                : { filter: "blur(6px)", pointerEvents: "none", userSelect: "none" }
+            }
+          >
+            {/* Rewritten headline */}
+            <div className="bg-orange-50 border-2 border-orange-300 rounded-2xl p-6">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xs font-bold uppercase tracking-widest text-orange-700">
+                  ✏️ Rewritten Headline
+                </h2>
+                {isPaid && <CopyButton text={result.rewritten_headline} />}
+              </div>
+              <p className="text-orange-900 font-bold text-lg leading-snug">
+                "{result.rewritten_headline}"
+              </p>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-5">
+              <Section title="Value Proposition" emoji="💎">
+                <p className="text-gray-700 text-sm leading-relaxed mt-2">
+                  {result.value_prop_feedback}
+                </p>
+              </Section>
+
+              <Section title="Call-to-Action" emoji="🎯">
+                <p className="text-gray-700 text-sm leading-relaxed mt-2">
+                  {result.cta_feedback}
+                </p>
+              </Section>
+            </div>
+
+            <Section title="UX Friction Points" emoji="⚡">
+              <BulletList items={result.ux_issues} />
+            </Section>
+
+            <Section title="Trust Issues" emoji="🔒">
+              <BulletList items={result.trust_issues} />
+            </Section>
+
+            <Section title="Top Improvements" emoji="🚀">
+              <ol className="space-y-3 mt-3">
+                {result.improvements.map((item, i) => (
+                  <li key={i} className="flex gap-3 text-sm leading-relaxed text-gray-700">
+                    <span className="flex items-center justify-center w-6 h-6 rounded-full bg-black text-white text-xs font-black shrink-0 mt-0.5">
+                      {i + 1}
+                    </span>
+                    {item}
+                  </li>
+                ))}
+              </ol>
+            </Section>
+          </div>
+
+          {/* Paywall overlay */}
+          {!isPaid && (
+            <div className="absolute inset-0 flex items-start justify-center pt-12">
+              <Paywall currentUrl={currentUrl} />
+            </div>
+          )}
+        </div>
 
         <div className="text-center pt-4 pb-10">
           <button
