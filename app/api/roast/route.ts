@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractText } from "@/lib/extractText";
 import { getRoast } from "@/lib/claude";
+import { saveRoast } from "@/lib/store";
 
 export const maxDuration = 60;
 
@@ -69,5 +70,9 @@ export async function POST(req: NextRequest) {
   }
 
   const result = await getRoast(text, url);
-  return NextResponse.json(result);
+
+  const id = crypto.randomUUID();
+  saveRoast(id, url, result);
+
+  return NextResponse.json({ id });
 }

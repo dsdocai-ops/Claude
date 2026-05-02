@@ -1,19 +1,31 @@
 "use client";
 
-const PAYMENT_LINK = process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK ?? "#";
+import { useState } from "react";
 
-export function Paywall({ currentUrl }: { currentUrl: string }) {
-  function goToCheckout() {
-    // Append success_url param so Stripe redirects back with ?paid=true
-    // (only works if your Stripe Payment Link is configured to use a dynamic redirect)
-    window.location.href = PAYMENT_LINK;
-  }
+export function Paywall({ id }: { id: string }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  function alreadyPaid() {
-    // Manually unlock — trusted on honour, acceptable for MVP
-    const url = new URL(currentUrl);
-    url.searchParams.set("paid", "true");
-    window.location.href = url.toString();
+  async function goToCheckout() {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Could not start checkout. Please try again.");
+        setLoading(false);
+        return;
+      }
+      window.location.href = data.url;
+    } catch {
+      setError("Network error. Please try again.");
+      setLoading(false);
+    }
   }
 
   return (
@@ -43,18 +55,16 @@ export function Paywall({ currentUrl }: { currentUrl: string }) {
           ))}
         </ul>
 
-        <button
-          onClick={goToCheckout}
-          className="w-full py-4 bg-black text-white font-black text-lg rounded-xl hover:bg-gray-900 active:scale-95 transition-all shadow-sm mb-3"
-        >
-          Unlock for $5 🔥
-        </button>
+        {error && (
+          <p className="text-sm text-red-500 mb-3">{error}</p>
+        )}
 
         <button
-          onClick={alreadyPaid}
-          className="text-xs text-gray-400 hover:text-gray-600 transition-colors underline underline-offset-2"
+          onClick={goToCheckout}
+          disabled={loading}
+          className="w-full py-4 bg-black text-white font-black text-lg rounded-xl hover:bg-gray-900 active:scale-95 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Already paid? Click here to unlock
+          {loading ? "Redirecting to Stripe…" : "Unlock for $5 🔥"}
         </button>
       </div>
     </div>

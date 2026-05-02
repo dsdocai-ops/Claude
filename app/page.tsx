@@ -133,8 +133,7 @@ export default function Home() {
         return;
       }
 
-      const encoded = encodeURIComponent(JSON.stringify(data));
-      router.push(`/results?data=${encoded}&url=${encodeURIComponent(normalized)}`);
+      router.push(`/results?id=${data.id}`);
     } catch {
       setError("Network error. Please try again.");
       setLoading(false);

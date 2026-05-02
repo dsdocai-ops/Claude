@@ -71,48 +71,58 @@ function CopyButton({ text }: { text: string }) {
 function ResultsContent() {
   const params = useSearchParams();
   const router = useRouter();
-  const [result, setResult] = useState<RoastResult | null>(null);
-  const [siteUrl, setSiteUrl] = useState("");
-  const [parseError, setParseError] = useState(false);
-  const [currentUrl, setCurrentUrl] = useState("");
 
+  const id = params.get("id");
   const isPaid = params.get("paid") === "true";
 
+  const [result, setResult] = useState<RoastResult | null>(null);
+  const [siteUrl, setSiteUrl] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+
   useEffect(() => {
-    setCurrentUrl(window.location.href);
-    const raw = params.get("data");
-    const url = params.get("url");
-    if (!raw) {
-      setParseError(true);
+    if (!id) {
+      setNotFound(true);
+      setLoading(false);
       return;
     }
-    try {
-      setResult(JSON.parse(decodeURIComponent(raw)));
-      setSiteUrl(url ? decodeURIComponent(url) : "");
-    } catch {
-      setParseError(true);
-    }
-  }, [params]);
 
-  if (parseError) {
+    fetch(`/api/result?id=${id}`)
+      .then((res) => {
+        if (res.status === 404) { setNotFound(true); return null; }
+        return res.json();
+      })
+      .then((data) => {
+        if (data) {
+          setResult(data.result);
+          setSiteUrl(data.siteUrl ?? "");
+        }
+      })
+      .catch(() => setNotFound(true))
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4 text-center px-6">
-        <p className="text-2xl font-bold">No roast found</p>
-        <p className="text-gray-500">Something went wrong parsing the results.</p>
-        <button
-          onClick={() => router.push("/")}
-          className="mt-4 px-6 py-3 bg-black text-white font-bold rounded-xl hover:bg-gray-900 transition-all"
-        >
-          Try Again
-        </button>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin" />
       </div>
     );
   }
 
-  if (!result) {
+  if (notFound || !result) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-10 h-10 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin" />
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 text-center px-6">
+        <p className="text-2xl font-bold">Roast not found</p>
+        <p className="text-gray-500">
+          This roast has expired or the link is invalid.
+        </p>
+        <button
+          onClick={() => router.push("/")}
+          className="mt-4 px-6 py-3 bg-black text-white font-bold rounded-xl hover:bg-gray-900 transition-all"
+        >
+          Start a new roast
+        </button>
       </div>
     );
   }
@@ -173,7 +183,7 @@ function ResultsContent() {
           </p>
         </Section>
 
-        {/* Free teaser label */}
+        {/* Divider */}
         {!isPaid && (
           <div className="flex items-center gap-3">
             <div className="flex-1 h-px bg-gray-200" />
@@ -186,7 +196,6 @@ function ResultsContent() {
 
         {/* Locked content */}
         <div className="relative">
-          {/* Blurred sections */}
           <div
             className="space-y-5 transition-all duration-300"
             style={
@@ -195,7 +204,6 @@ function ResultsContent() {
                 : { filter: "blur(6px)", pointerEvents: "none", userSelect: "none" }
             }
           >
-            {/* Rewritten headline */}
             <div className="bg-orange-50 border-2 border-orange-300 rounded-2xl p-6">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-xs font-bold uppercase tracking-widest text-orange-700">
@@ -214,7 +222,6 @@ function ResultsContent() {
                   {result.value_prop_feedback}
                 </p>
               </Section>
-
               <Section title="Call-to-Action" emoji="🎯">
                 <p className="text-gray-700 text-sm leading-relaxed mt-2">
                   {result.cta_feedback}
@@ -245,9 +252,9 @@ function ResultsContent() {
           </div>
 
           {/* Paywall overlay */}
-          {!isPaid && (
+          {!isPaid && id && (
             <div className="absolute inset-0 flex items-start justify-center pt-12">
-              <Paywall currentUrl={currentUrl} />
+              <Paywall id={id} />
             </div>
           )}
         </div>
