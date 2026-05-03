@@ -382,7 +382,20 @@ function ResultsContent() {
 
               {id && (
                 <div className="absolute inset-0 flex items-start justify-center pt-12">
-                  <Paywall id={id} onUnlock={() => setIsPaid(true)} />
+                  <Paywall
+                    id={id}
+                    onUnlock={(data) => {
+                      setIsPaid(true);
+                      if (data) {
+                        setFull(data.result);
+                        setSiteUrl(data.siteUrl);
+                        sessionStorage.setItem(
+                          `roast:${id}`,
+                          JSON.stringify({ siteUrl: data.siteUrl, result: data.result, paid: true })
+                        );
+                      }
+                    }}
+                  />
                 </div>
               )}
             </>

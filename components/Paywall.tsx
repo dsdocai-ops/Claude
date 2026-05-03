@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import type { RoastResult } from "@/lib/types";
 
-export function Paywall({ id, onUnlock }: { id: string; onUnlock?: () => void }) {
+export function Paywall({ id, onUnlock }: { id: string; onUnlock?: (result?: { siteUrl: string; result: RoastResult }) => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [code, setCode] = useState("");
@@ -41,7 +42,7 @@ export function Paywall({ id, onUnlock }: { id: string; onUnlock?: () => void })
       });
       const data = await res.json();
       if (data.valid) {
-        onUnlock?.();
+        onUnlock?.(data.result ? { siteUrl: data.siteUrl, result: data.result } : undefined);
       } else {
         setCodeError("Invalid code.");
       }

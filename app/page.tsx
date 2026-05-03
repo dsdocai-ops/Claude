@@ -152,9 +152,6 @@ export default function Home() {
           <Flame className="w-5 h-5 text-orange-500" />
           Website Roaster
         </div>
-        <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">
-          Powered by Claude AI
-        </span>
       </nav>
 
       {/* Hero */}
@@ -230,7 +227,7 @@ export default function Home() {
       )}
 
       <footer className="text-center py-6 text-xs text-gray-300 border-t border-gray-100">
-        Built with Claude AI · No data stored · Free to use
+        No data stored · Free to use
       </footer>
     </main>
   );
