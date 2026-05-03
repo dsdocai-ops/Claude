@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { markPaid } from "@/lib/store";
+import { markPaid, getRoastById } from "@/lib/store";
 
 export async function POST(req: NextRequest) {
   let body: { code?: string; id?: string };
@@ -19,10 +19,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ valid: false }, { status: 200 });
   }
 
-  const valid = code.trim() === unlockCode;
-  if (valid && id && typeof id === "string") {
-    await markPaid(id);
+  if (code.trim() !== unlockCode) {
+    return NextResponse.json({ valid: false }, { status: 200 });
   }
 
-  return NextResponse.json({ valid });
+  if (id && typeof id === "string") {
+    await markPaid(id);
+    const entry = await getRoastById(id);
+    if (entry) {
+      return NextResponse.json({ valid: true, siteUrl: entry.siteUrl, result: entry.result });
+    }
+  }
+
+  return NextResponse.json({ valid: true });
 }
